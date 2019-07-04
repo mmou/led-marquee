@@ -29,6 +29,7 @@ fn main() {
     }))
     .unwrap();
 
+    println!(".........................");
     sock.send_to(&msg_buf, to_addr).unwrap();
 
     // send random values to xy fields

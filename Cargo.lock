@@ -11,16 +11,40 @@ version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "embedded-graphics"
+version = "0.5.2-alpha.0"
+source = "git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride#c49714763e7a0e81f26694eec19dcd4bce953d1c"
+dependencies = [
+ "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tinybmp 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "libc"
-version = "0.2.55"
+version = "0.2.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "marquee"
 version = "0.1.0"
 dependencies = [
+ "embedded-graphics 0.5.2-alpha.0 (git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride)",
  "rosc 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rpi-led-matrix 0.1.1",
+]
+
+[[package]]
+name = "memchr"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "nom"
+version = "4.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "memchr 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -36,11 +60,30 @@ name = "rpi-led-matrix"
 version = "0.1.1"
 dependencies = [
  "cc 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.55 (registry+https://github.com/rust-lang/crates.io-index)",
+ "embedded-graphics 0.5.2-alpha.0 (git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride)",
+ "libc 0.2.58 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "tinybmp"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "nom 4.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "version_check"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
 "checksum byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a7c3dd8985a7111efc5c80b44e23ecdd8c007de8ade3b96595387e812b957cf5"
 "checksum cc 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)" = "39f75544d7bbaf57560d2168f28fd649ff9c76153874db88bdbdfd839b1a7e7d"
-"checksum libc 0.2.55 (registry+https://github.com/rust-lang/crates.io-index)" = "42914d39aad277d9e176efbdad68acb1d5443ab65afe0e0e4f0d49352a950880"
+"checksum embedded-graphics 0.5.2-alpha.0 (git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride)" = "<none>"
+"checksum libc 0.2.58 (registry+https://github.com/rust-lang/crates.io-index)" = "6281b86796ba5e4366000be6e9e18bf35580adf9e63fbe2294aadb587613a319"
+"checksum memchr 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2efc7bc57c883d4a4d6e3246905283d8dae951bb3bd32f49d6ef297f546e1c39"
+"checksum nom 4.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2ad2a91a8e869eeb30b9cb3119ae87773a8f4ae617f41b1eb9c154b2905f7bd6"
 "checksum rosc 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "39332ba44e0804497d958f692a3fbb7dd993cc996070189f40577de87ff1b8d9"
+"checksum tinybmp 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "503e3fde7e36b1aa2345af8a3af0086c9b01d9db07b24f3fb0aab07316b9fa10"
+"checksum version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"

@@ -14,6 +14,9 @@ use std::net::{SocketAddrV4, UdpSocket};
 use std::path::Path;
 use std::str::FromStr;
 use std::{thread, time};
+use rand::distributions::Uniform;
+use rand::prelude::*;
+use std::time::Duration;
 
 use std::f64::consts::PI;
 
@@ -250,6 +253,7 @@ fn main() {
     };
     //screen.scroll_text_8x16(msg);
 
+    /*
     let mut image1: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
     let mut image2: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../priceless2.bmp")).unwrap();
 
@@ -259,6 +263,38 @@ fn main() {
 
     marquee.scroll(&image1, image1.width(), time::Duration::new(5, 0));
     marquee.scroll(&image2, image2.width(), time::Duration::new(5, 0));
+    */
+
+
+    let mut image: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
+    let mut image1: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-1.bmp")).unwrap();
+    let mut image2: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-2.bmp")).unwrap();
+    let mut image3: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-3.bmp")).unwrap();
+    let mut image4: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-4.bmp")).unwrap();
+    let mut image5: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-5.bmp")).unwrap();
+
+    let mut images = vec![image1, image2, image3, image4, image5];
+
+
+    let mut rng = rand::thread_rng();
+
+    let clean_range = Uniform::new(100, 2000);
+    let glitch_range = Uniform::new(10, 300);
+
+    loop {
+        screen.draw(&image);
+        screen.flush();
+        thread::sleep(Duration::from_millis(rng.sample(clean_range)));
+
+
+        images.shuffle(&mut rng);
+
+        for img in images.iter() {
+            screen.draw(img);
+            screen.flush();
+            thread::sleep(Duration::from_millis(rng.sample(glitch_range)));
+        }
+    }
 
     //screen.draw_bmp(&image, time::Duration::new(2, 0));
     //screen.scroll_bmp(&image, time::Duration::new(10, 0));

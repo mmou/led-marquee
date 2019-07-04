@@ -8,3 +8,4 @@ edition = "2018"
 embedded-graphics={git="https://github.com/evq/embedded-graphics.git", branch="fix_bmp_stride", features=["bmp"]}
 rpi-led-matrix={git="https://github.com/mmou/rust-rpi-rgb-led-matrix.git"}
 rosc = "~0.1"
+rand  = "0.7.0"

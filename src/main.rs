@@ -17,7 +17,7 @@ use std::{thread, time};
 use rand::distributions::Uniform;
 use rand::prelude::*;
 use std::time::Duration;
-
+use std::sync::{Arc, Mutex};
 use std::f64::consts::PI;
 
 const SCROLL_WAIT_NS: u32 = 5000000; // 0.05 sec
@@ -32,6 +32,8 @@ struct Hub75 {
     matrix: LedMatrix,
     offscreen: LedCanvas,
 }
+
+unsafe impl Send for Hub75 {}
 
 pub trait Flushable {
     fn flush(&mut self);
@@ -265,6 +267,7 @@ fn main() {
     marquee.scroll(&image2, image2.width(), time::Duration::new(5, 0));
     */
 
+    let mut s = Scrollable::<Hub75, Rgb888>::new(screen);
 
     let mut image: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
     let mut image1: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-1.bmp")).unwrap();
@@ -281,17 +284,39 @@ fn main() {
     let clean_range = Uniform::new(100, 2000);
     let glitch_range = Uniform::new(10, 300);
 
+    let v = Arc::new(Mutex::new(s));
+
+    let cloned_v = v.clone();
+    let cloned_image = image.clone();
+    thread::spawn(move || {
+       let v = cloned_v;
+        loop {
+           {
+               let mut s = v.lock().unwrap();
+               s.draw(&cloned_image);
+               s.screen.flush();
+           }
+            thread::sleep(Duration::from_millis(5));
+        }
+    });
+
     loop {
-        screen.draw(&image);
-        screen.flush();
+        {
+            let mut s = v.lock().unwrap();
+            s.draw(&image);
+            s.screen.flush();
+        }
         thread::sleep(Duration::from_millis(rng.sample(clean_range)));
 
 
         images.shuffle(&mut rng);
 
         for img in images.iter() {
-            screen.draw(img);
-            screen.flush();
+            {
+                let mut s = v.lock().unwrap();
+                s.draw(img);
+                s.screen.flush();
+            }
             thread::sleep(Duration::from_millis(rng.sample(glitch_range)));
         }
     }

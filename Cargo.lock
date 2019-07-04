@@ -30,7 +30,7 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics 0.5.2-alpha.0 (git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride)",
  "rosc 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "rpi-led-matrix 0.1.1",
+ "rpi-led-matrix 0.1.1 (git+https://github.com/mmou/rust-rpi-rgb-led-matrix.git)",
 ]
 
 [[package]]
@@ -58,6 +58,7 @@ dependencies = [
 [[package]]
 name = "rpi-led-matrix"
 version = "0.1.1"
+source = "git+https://github.com/mmou/rust-rpi-rgb-led-matrix.git#d5cd5195ba884b41748560f68e5103dc6090121e"
 dependencies = [
  "cc 1.0.37 (registry+https://github.com/rust-lang/crates.io-index)",
  "embedded-graphics 0.5.2-alpha.0 (git+https://github.com/evq/embedded-graphics.git?branch=fix_bmp_stride)",
@@ -85,5 +86,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum memchr 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2efc7bc57c883d4a4d6e3246905283d8dae951bb3bd32f49d6ef297f546e1c39"
 "checksum nom 4.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2ad2a91a8e869eeb30b9cb3119ae87773a8f4ae617f41b1eb9c154b2905f7bd6"
 "checksum rosc 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "39332ba44e0804497d958f692a3fbb7dd993cc996070189f40577de87ff1b8d9"
+"checksum rpi-led-matrix 0.1.1 (git+https://github.com/mmou/rust-rpi-rgb-led-matrix.git)" = "<none>"
 "checksum tinybmp 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "503e3fde7e36b1aa2345af8a3af0086c9b01d9db07b24f3fb0aab07316b9fa10"
 "checksum version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"

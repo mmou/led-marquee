@@ -267,8 +267,6 @@ fn main() {
     marquee.scroll(&image2, image2.width(), time::Duration::new(5, 0));
     */
 
-    let mut s = Scrollable::<Hub75, Rgb888>::new(screen);
-
     let mut image: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
     let mut image1: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-1.bmp")).unwrap();
     let mut image2: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp-2.bmp")).unwrap();
@@ -278,6 +276,9 @@ fn main() {
 
     let mut images = vec![image1, image2, image3, image4, image5];
 
+
+    let mut s = Scrollable::<Hub75, Rgb888>::new(screen);
+    s.set_image_width(image.width());
 
     let mut rng = rand::thread_rng();
 

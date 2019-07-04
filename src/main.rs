@@ -9,6 +9,7 @@ use embedded_graphics::{fonts::Font8x16, prelude::*, text_8x16};
 use rosc::OscPacket;
 use rpi_led_matrix::{LedCanvas, LedColor, LedFont, LedMatrix, LedMatrixOptions};
 use std::env;
+use std::marker::PhantomData;
 use std::net::{SocketAddrV4, UdpSocket};
 use std::path::Path;
 use std::str::FromStr;
@@ -16,22 +17,129 @@ use std::{thread, time};
 
 use std::f64::consts::PI;
 
-const SCROLL_WAIT_NS: u32 = 50000000; // 0.5 sec
+const SCROLL_WAIT_NS: u32 = 5000000; // 0.05 sec
 
-struct Marquee {
-    matrix: LedMatrix,
-    offscreen: LedCanvas,
-    // perm:
-    // temp:
-}
-
-struct Message {
+struct DisplayMessage {
     text: String,
-    color: LedColor,
+    color: Rgb888,
     duration: time::Duration,
 }
 
-impl Drawing<LedColor> for Marquee {
+struct Hub75 {
+    matrix: LedMatrix,
+    offscreen: LedCanvas,
+}
+
+pub trait Flushable {
+    fn flush(&mut self);
+}
+
+impl Flushable for Hub75 {
+    fn flush(&mut self) {
+        self.offscreen = self.matrix.swap(self.offscreen.clone());
+        self.offscreen.clear();
+    }
+}
+
+struct Marquee<T, U>
+where
+    T: Drawing<U> + Flushable,
+    U: PixelColor,
+{
+    display: Scrollable<T, U>,
+}
+
+impl<T, U> Marquee<T, U>
+where
+    T: Drawing<U> + Flushable,
+    U: PixelColor,
+{
+    pub fn new(display: Scrollable<T, U>) -> Self {
+        Marquee { display }
+    }
+
+    pub fn scroll<V>(&mut self, image: V, width: u32, duration: time::Duration)
+    where
+        V: IntoIterator<Item = Pixel<U>> + Clone,
+    {
+        self.display.set_image_width(width);
+        let now = time::Instant::now();
+        let mut x: i32 = 0;
+        while now.elapsed() < duration {
+            self.display.set_x(-x);
+            self.display.draw(image.clone());
+            self.display.screen.flush();
+            x = x + 1;
+            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS * 10));
+        }
+    }
+}
+
+struct Scrollable<T, U>
+where
+    T: Drawing<U>,
+    U: PixelColor,
+{
+    screen: T,
+    max_x: u32,
+    offset_x: i32,
+    pixel_type: PhantomData<U>,
+}
+
+impl<T, U> Drawing<U> for Scrollable<T, U>
+where
+    T: Drawing<U>,
+    U: PixelColor,
+{
+    fn draw<V>(&mut self, item: V)
+    where
+        V: IntoIterator<Item = Pixel<U>>,
+    {
+        let translated_item: Vec<Pixel<U>> = item
+            .into_iter()
+            .map(|Pixel(coord, color)| {
+                Pixel(
+                    UnsignedCoord::new(
+                        ((coord[0] as i32 + self.offset_x + self.max_x as i32) % self.max_x as i32)
+                            as u32,
+                        coord[1],
+                    ),
+                    color,
+                )
+            })
+            .collect();
+        self.screen.draw(translated_item);
+    }
+}
+
+impl<T, U> Scrollable<T, U>
+where
+    T: Drawing<U>,
+    U: PixelColor,
+{
+    pub fn new(screen: T) -> Self {
+        Scrollable {
+            screen: screen,
+            max_x: 0,
+            offset_x: 0,
+            pixel_type: PhantomData,
+        }
+    }
+
+    pub fn inc_x(&mut self, x: i32) {
+        self.offset_x = self.offset_x + x;
+    }
+
+    pub fn set_x(&mut self, x: i32) {
+        self.offset_x = x;
+    }
+
+    pub fn set_image_width(&mut self, x: u32) {
+        self.max_x = x;
+    }
+}
+
+impl Drawing<LedColor> for Hub75 {
     fn draw<T>(&mut self, item: T)
     where
         T: IntoIterator<Item = Pixel<LedColor>>,
@@ -42,7 +150,22 @@ impl Drawing<LedColor> for Marquee {
     }
 }
 
-impl Marquee {
+impl Drawing<Rgb888> for Hub75 {
+    fn draw<T>(&mut self, item: T)
+    where
+        T: IntoIterator<Item = Pixel<Rgb888>>,
+    {
+        for Pixel(coord, color) in item {
+            self.offscreen.set(
+                coord[0] as i32,
+                coord[1] as i32,
+                &LedColor::from_raw_data(color.into()),
+            );
+        }
+    }
+}
+
+impl Hub75 {
     pub fn new() -> Self {
         let mut options = LedMatrixOptions::new();
         options.set_hardware_mapping("adafruit-hat-pwm");
@@ -59,219 +182,84 @@ impl Marquee {
         let matrix = LedMatrix::new(Some(options)).unwrap();
         let mut offscreen = matrix.offscreen_canvas();
         offscreen.clear();
-        Marquee { matrix, offscreen }
+        Hub75 { matrix, offscreen }
     }
 
-    pub fn flush(&mut self) {
-        self.offscreen = self.matrix.swap(self.offscreen.clone());
-        self.offscreen.clear();
+    fn draw_text_8x16(&mut self, msg: DisplayMessage) {
+        let styled_text: Font8x16<Rgb888> = Font8x16::render_str(&msg.text).stroke(Some(msg.color));
+        self.draw(styled_text);
+        self.flush();
+        thread::sleep(msg.duration);
     }
 
-    fn scroll(&mut self, msg: Message) {
-        let mut canvas = self.matrix.canvas();
+    fn scroll_text_8x16(&mut self, msg: DisplayMessage) {
+        let text: Font8x16<Rgb888> = Font8x16::render_str(&msg.text).stroke(Some(msg.color));
 
-        let font = LedFont::new(Path::new("/home/pi/10x20.bdf")).unwrap();
-        let (width, height) = canvas.size();
-        let baseline = height - 2; //height / 2;
-
-        canvas = self.matrix.offscreen_canvas();
-
+        let text_width: i32 = msg.text.len() as i32 * 8;
         let now = time::Instant::now();
-        let text_width: i32 = 10 * ((msg.text.len() as i32) + 2);
         let mut x: i32 = 0;
         while now.elapsed() < msg.duration {
-            canvas.clear();
-            canvas.draw_text(&font, &msg.text, x % width, baseline, &msg.color, 0, false);
-            canvas.draw_text(
-                &font,
-                &msg.text,
-                x % width - text_width,
-                baseline,
-                &msg.color,
-                0,
-                false,
-            );
-            canvas.draw_text(
-                &font,
-                &msg.text,
-                x % width + text_width,
-                baseline,
-                &msg.color,
-                0,
-                false,
-            );
+            let temp_text = text.translate(icoord!(-x % text_width, 0));
+            self.draw(&temp_text);
+            let temp_text_right = temp_text.translate(icoord!(text_width, 0));
+            self.draw(&temp_text_right);
+
+            let temp_text_left = temp_text.translate(icoord!(-text_width, 0));
+            self.draw(&temp_text_left);
+            self.flush();
             x = x + 1;
-            canvas = self.matrix.swap(canvas);
-            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS));
+            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS * 10));
         }
     }
 
-    fn draw_line(&mut self) {
-        let mut canvas = self.matrix.canvas();
-
-        let (width, height) = canvas.size();
-
-        canvas = self.matrix.offscreen_canvas();
-
-        let mut color = LedColor {
-            red: 127,
-            green: 0,
-            blue: 0,
-        };
-
-        canvas.clear();
-        for x in 0..width {
-            color.blue = 255 - 3 * x as u8;
-            canvas.draw_line(x, 0, width - 1 - x, height - 1, &color);
-            canvas = self.matrix.swap(canvas);
-            thread::sleep(time::Duration::new(0, 10000000));
-        }
-    }
-
-    fn draw_gradient(&mut self) {
-        let mut canvas = self.matrix.canvas();
-        let mut color = LedColor {
-            red: 0,
-            green: 0,
-            blue: 0,
-        };
-        let period = 400;
-        let duration = time::Duration::new(3, 0);
-        let sleep_duration = duration / period;
-
-        for t in 0..period {
-            let t = t as f64;
-            color.red = ((PI * t / period as f64).sin() * 255.) as u8;
-            color.green = ((2. * PI * t / period as f64).cos() * 255.) as u8;
-            color.blue = ((3. * PI * t / period as f64 + 0.3).cos() * 255.) as u8;
-            canvas.set(1, 1, &color);
-            canvas.set(0, 0, &color);
-            thread::sleep(sleep_duration);
-        }
-    }
-
-    fn draw_text_8x16(&mut self) {
-        let styled_text: Font8x16<Rgb888> =
-            text_8x16!("Hello world!", stroke = Some(Rgb888::new(100, 0, 0)));
-        self.draw(styled_text.into_iter().map(|p| {
-            let tmp: Rgb888 = p.1.into();
-            let raw: u32 = tmp.into();
-            Pixel(p.0, LedColor::from_raw_data(raw))
-        }));
+    fn draw_bmp(&mut self, image: &ImageBmp<Rgb888>, duration: time::Duration) {
+        self.draw(image);
         self.flush();
-        thread::sleep(time::Duration::new(3, 0));
+        thread::sleep(duration);
     }
 
-    fn draw_bmp(&mut self) {
-        let image: ImageBmp<Rgb565> = ImageBmp::new(include_bytes!("../priceless.bmp")).unwrap();
-        self.draw(image.into_iter().map(|p| {
-            let tmp: Rgb888 = p.1.into();
-            let raw: u32 = tmp.into();
-            Pixel(p.0, LedColor::from_raw_data(raw))
-        }));
-        self.flush();
-        thread::sleep(time::Duration::new(20, 0));
-    }
-
-    fn scroll_bmp(&mut self) {
+    fn scroll_bmp(&mut self, image: &ImageBmp<Rgb888>, duration: time::Duration) {
         let (width, height) = self.offscreen.size();
-        let mut image: ImageBmp<Rgb565> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
 
         let image_width: i32 = image.width() as i32;
-        let duration = time::Duration::new(20, 0);
         let now = time::Instant::now();
         let mut x: i32 = 0;
         while now.elapsed() < duration {
             let temp_image = image.translate(icoord!(-x % image_width, 0));
-            self.draw(temp_image.into_iter().map(|p| {
-                let tmp: Rgb888 = p.1.into();
-                let raw: u32 = tmp.into();
-                Pixel(p.0, LedColor::from_raw_data(raw))
-            }));
+            self.draw(&temp_image);
             let temp_image_right = temp_image.translate(icoord!(image_width, 0));
-            self.draw(temp_image_right.into_iter().map(|p| {
-                let tmp: Rgb888 = p.1.into();
-                let raw: u32 = tmp.into();
-                Pixel(p.0, LedColor::from_raw_data(raw))
-            }));
+            self.draw(&temp_image_right);
 
             let temp_image_left = temp_image.translate(icoord!(-image_width, 0));
-            self.draw(temp_image_left.into_iter().map(|p| {
-                let tmp: Rgb888 = p.1.into();
-                let raw: u32 = tmp.into();
-                Pixel(p.0, LedColor::from_raw_data(raw))
-            }));
+            self.draw(&temp_image_left);
             self.flush();
             x = x + 1;
-            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS / 100));
+            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS * 10));
         }
     }
 }
 
 fn main() {
-    let mut marquee = Marquee::new();
+    let mut screen = Hub75::new();
 
-    let color = LedColor {
-        red: 0,
-        green: 127,
-        blue: 0,
-    };
-    let msg = Message {
+    let color = Rgb888::new(100, 0, 0);
+    let msg = DisplayMessage {
         text: "IT'S WORKING".to_string(),
         color: color,
-        duration: time::Duration::new(20, 0),
+        duration: time::Duration::new(5, 0),
     };
-    // marquee.draw_line();
-    // marquee.scroll(msg);
-    // marquee.draw_gradient();
-    // marquee.draw_text_8x16();
-    marquee.scroll_bmp();
-}
+    //screen.scroll_text_8x16(msg);
 
-fn main2() {
-    let args: Vec<String> = env::args().collect();
-    let usage = format!("Usage {} IP:PORT", &args[0]);
-    if args.len() < 2 {
-        println!("{}", usage);
-        ::std::process::exit(1)
-    }
-    let addr = match SocketAddrV4::from_str(&args[1]) {
-        Ok(addr) => addr,
-        Err(_) => panic!(usage),
-    };
-    let sock = UdpSocket::bind(addr).unwrap();
-    println!("Listening to {}", addr);
+    let mut image1: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../megacorp.bmp")).unwrap();
+    let mut image2: ImageBmp<Rgb888> = ImageBmp::new(include_bytes!("../priceless2.bmp")).unwrap();
 
-    let mut buf = [0u8; rosc::decoder::MTU];
+    let mut s = Scrollable::<Hub75, Rgb888>::new(screen);
 
-    loop {
-        match sock.recv_from(&mut buf) {
-            Ok((size, addr)) => {
-                println!("Received packet with size {} from: {}", size, addr);
-                let packet = rosc::decoder::decode(&buf[..size]).unwrap();
-                handle_packet(packet);
-            }
-            Err(e) => {
-                println!("Error receiving from socket: {}", e);
-                break;
-            }
-        }
-    }
-}
+    let mut marquee = Marquee::<Hub75, Rgb888>::new(s);
 
-fn handle_packet(packet: OscPacket) {
-    match packet {
-        OscPacket::Message(msg) => {
-            println!("OSC address: {}", msg.addr);
-            match msg.args {
-                Some(args) => {
-                    println!("OSC arguments: {:?}", args);
-                }
-                None => println!("No arguments in message."),
-            }
-        }
-        OscPacket::Bundle(bundle) => {
-            println!("OSC Bundle: {:?}", bundle);
-        }
-    }
+    marquee.scroll(&image1, image1.width(), time::Duration::new(5, 0));
+    marquee.scroll(&image2, image2.width(), time::Duration::new(5, 0));
+
+    //screen.draw_bmp(&image, time::Duration::new(2, 0));
+    //screen.scroll_bmp(&image, time::Duration::new(10, 0));
 }

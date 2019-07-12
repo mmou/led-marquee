@@ -1,21 +1,23 @@
+use embedded_graphics::drawable::Dimensions;
 use embedded_graphics::fonts::Font8x16;
 use embedded_graphics::icoord;
 use embedded_graphics::image::ImageBmp;
 use embedded_graphics::pixelcolor::{FromRawData, Rgb888};
 use embedded_graphics::prelude::*;
 use embedded_graphics::Drawing;
+use graphics::ImageSize;
 use rpi_led_matrix::{LedCanvas, LedColor, LedMatrix, LedMatrixOptions};
 use std::marker::PhantomData;
+use std::slice::Iter;
 use std::str::FromStr;
 use std::{thread, time};
 
-const SCROLL_WAIT_NS: u32 = 100000; // 0.01 sec
+const SCREEN_WIDTH: u32 = 32 * 4;
+const SCROLL_WAIT_NS: u32 = 30 * 1000 * 1000; // 0.01 sec
 
 pub trait Flushable {
     fn flush(&mut self);
 }
-
-/////////////////////////////////
 
 /// Hub75 represents
 pub struct Hub75 {
@@ -32,7 +34,6 @@ impl Flushable for Hub75 {
     }
 }
 
-/*
 impl Drawing<LedColor> for Hub75 {
     fn draw<T>(&mut self, item: T)
     where
@@ -42,7 +43,7 @@ impl Drawing<LedColor> for Hub75 {
             self.offscreen.set(coord[0] as i32, coord[1] as i32, &color);
         }
     }
-}*/
+}
 
 impl Drawing<Rgb888> for Hub75 {
     fn draw<T>(&mut self, item: T)
@@ -78,61 +79,6 @@ impl Hub75 {
         offscreen.clear();
         Hub75 { matrix, offscreen }
     }
-
-    /*
-        pub fn draw_text_8x16(&mut self, msg: DisplayMessage) {
-            let styled_text: Font8x16<Rgb888> = Font8x16::render_str(&msg.text).stroke(Some(msg.color));
-            self.draw(styled_text);
-            self.flush();
-            thread::sleep(msg.duration);
-        }
-
-        pub fn scroll_text_8x16(&mut self, msg: DisplayMessage) {
-            let text: Font8x16<Rgb888> = Font8x16::render_str(&msg.text).stroke(Some(msg.color));
-
-            let text_width: i32 = msg.text.len() as i32 * 8;
-            let now = time::Instant::now();
-            let mut x: i32 = 0;
-            while now.elapsed() < msg.duration {
-                let temp_text = text.translate(icoord!(-x % text_width, 0));
-                self.draw(&temp_text);
-                let temp_text_right = temp_text.translate(icoord!(text_width, 0));
-                self.draw(&temp_text_right);
-
-                let temp_text_left = temp_text.translate(icoord!(-text_width, 0));
-                self.draw(&temp_text_left);
-                self.flush();
-                x = x + 1;
-                thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS * 10));
-            }
-        }
-    */
-
-    fn draw_bmp(&mut self, image: &ImageBmp<Rgb888>, duration: time::Duration) {
-        self.draw(image);
-        self.flush();
-        thread::sleep(duration);
-    }
-
-    fn scroll_bmp(&mut self, image: &ImageBmp<Rgb888>, duration: time::Duration) {
-        let (width, height) = self.offscreen.size();
-
-        let image_width: i32 = image.width() as i32;
-        let now = time::Instant::now();
-        let mut x: i32 = 0;
-        while now.elapsed() < duration {
-            let temp_image = image.translate(icoord!(-x % image_width, 0));
-            self.draw(&temp_image);
-            let temp_image_right = temp_image.translate(icoord!(image_width, 0));
-            self.draw(&temp_image_right);
-
-            let temp_image_left = temp_image.translate(icoord!(-image_width, 0));
-            self.draw(&temp_image_left);
-            self.flush();
-            x = x + 1;
-            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS));
-        }
-    }
 }
 
 /// Scrollable is a wrapper around a Drawing with associated data about how to translate the
@@ -145,6 +91,7 @@ where
     pub screen: T,
     max_x: u32,
     offset_x: i32,
+    wrap: bool,
     pixel_type: PhantomData<U>,
 }
 
@@ -161,16 +108,12 @@ where
         let translated_item: Vec<Pixel<U>> = item
             .into_iter()
             .map(|Pixel(coord, color)| {
-                Pixel(
-                    UnsignedCoord::new(
-                        ((coord[0] as i32 + self.offset_x + self.max_x as i32) % self.max_x as i32)
-                            as u32,
-                        coord[1],
-                    ),
-                    color,
-                )
+                let mut new_x: i32 = coord[0] as i32 + self.offset_x;
+                if self.wrap {
+                    new_x = (new_x + self.max_x as i32) % self.max_x as i32;
+                }
+                Pixel(UnsignedCoord::new(new_x as u32, coord[1]), color)
             })
-            //.filter(|Pixel(coord, color)| coord[0] >= 0 && coord[0] <= 32 * 4)
             .collect();
         self.screen.draw(translated_item);
     }
@@ -184,24 +127,32 @@ where
     pub fn new(screen: T) -> Self {
         Scrollable {
             screen: screen,
-            max_x: 0,
+            max_x: SCREEN_WIDTH,
             offset_x: 0,
+            wrap: true,
             pixel_type: PhantomData,
         }
     }
 
     pub fn inc_x(&mut self, x: i32) {
-        self.offset_x = (self.offset_x + x) % self.max_x as i32;
+        if self.wrap {
+            self.offset_x = (self.offset_x + x + self.max_x as i32) % self.max_x as i32;
+        } else {
+            self.offset_x = self.offset_x + x;
+        }
     }
 
-    /// doesn't work for negative x
-    pub fn set_x(&mut self, x: i32) {
-        self.offset_x = x;
+    pub fn set_x(&mut self, x: u32) {
+        self.offset_x = x as i32;
     }
 
-    pub fn set_image_width(&mut self, x: u32) {
-        self.max_x = 32 * 4;
-        if x > 32 * 4 {
+    pub fn set_wrap(&mut self, wrap: bool) {
+        self.wrap = wrap;
+    }
+
+    pub fn set_width(&mut self, x: u32) {
+        self.max_x = SCREEN_WIDTH;
+        if x >= SCREEN_WIDTH {
             self.max_x = x;
         }
     }
@@ -233,18 +184,81 @@ where
         self.scroll(msg.text, text_width, msg.duration);
     }*/
 
-    ///
-    pub fn scroll<V>(&mut self, image: V, width: u32, duration: time::Duration)
+    /// scroll through the list of images n times
+    pub fn scroll_n_times<V>(&mut self, images: Vec<V>, n: u32)
     where
-        V: IntoIterator<Item = Pixel<U>> + Clone,
+        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions,
     {
-        self.display.set_image_width(width);
-        let now = time::Instant::now();
-        while now.elapsed() < duration {
-            self.display.inc_x(-1);
-            self.display.draw(image.clone());
-            self.display.screen.flush();
-            thread::sleep(time::Duration::new(0, SCROLL_WAIT_NS));
+        self.display.set_wrap(false);
+        for i in 0..n {
+            for image in images.iter() {
+                println!("\n...new image");
+                self.display.set_x(SCREEN_WIDTH);
+                let width = image.size()[0];
+                self.display.set_width(width);
+                let mut prev = time::Instant::now();
+                for j in 0..(width + SCREEN_WIDTH) {
+                    let now = time::Instant::now();
+                    println!(
+                        "\n......j = {}, width = {}, max_x = {}, offset_x = {}",
+                        j, width, self.display.max_x, self.display.offset_x
+                    );
+                    self.display.inc_x(-1);
+                    self.display.draw(image.clone());
+                    self.display.screen.flush();
+
+                    match time::Duration::new(0, SCROLL_WAIT_NS)
+                        .checked_sub(now.duration_since(prev))
+                    {
+                        Some(d) => thread::sleep(d),
+                        None => (),
+                    }
+                    prev = now;
+                }
+            }
         }
+    }
+
+    /// scroll the given image for duration time
+    pub fn scroll_for_duration<V>(&mut self, image: V, duration: time::Duration)
+    where
+        V: IntoIterator<Item = Pixel<U>> + Dimensions + Copy + Clone,
+    {
+        println!("\n***new image");
+        self.display.set_wrap(true);
+        self.display.set_x(SCREEN_WIDTH);
+        self.display.set_width(image.size()[0] + 32);
+        let start = time::Instant::now();
+        let mut prev = start;
+
+        while start.elapsed() < duration {
+            let now = time::Instant::now();
+            println!(
+                "\n...... width = {}, max_x = {}, offset_x = {}",
+                image.size()[0] + 32,
+                self.display.max_x,
+                self.display.offset_x
+            );
+            self.display.inc_x(-1);
+            self.display.draw(image.into_iter());
+            self.display.screen.flush();
+
+            match time::Duration::new(0, SCROLL_WAIT_NS).checked_sub(now.duration_since(prev)) {
+                Some(d) => thread::sleep(d),
+                None => (),
+            }
+            prev = now;
+        }
+    }
+
+    /// display the given image for duration time
+    pub fn display_for_duration<V>(&mut self, image: V, duration: time::Duration)
+    where
+        V: IntoIterator<Item = Pixel<U>> + Clone, //Dimensions + Clone,
+    {
+        self.display.set_x(0);
+        self.display.draw(image.clone());
+        self.display.screen.flush();
+        thread::sleep(duration);
     }
 }

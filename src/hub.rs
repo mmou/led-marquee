@@ -1,48 +1,28 @@
 use embedded_graphics::drawable::Dimensions;
-use embedded_graphics::fonts::font_builder::FontBuilder;
-use embedded_graphics::fonts::{Font8x16, Font8x16Conf};
+use embedded_graphics::fonts::Font8x16;
+use embedded_graphics::icoord;
 use embedded_graphics::image::ImageBmp;
 use embedded_graphics::pixelcolor::{FromRawData, Rgb888};
 use embedded_graphics::prelude::*;
 use embedded_graphics::Drawing;
+use graphics::ImageSize;
 use rpi_led_matrix::{LedCanvas, LedColor, LedMatrix, LedMatrixOptions};
-use std::fs::File;
-use std::io::Read;
 use std::marker::PhantomData;
+use std::slice::Iter;
+use std::str::FromStr;
 use std::{thread, time};
 
 const SCREEN_WIDTH: u32 = 32 * 4;
-const SCROLL_WAIT_NS: u32 = 30 * 1000 * 1000; // 0.01 sec
+const SCROLL_WAIT_NS: u32 = 20 * 1000 * 1000;
 
 pub trait Flushable {
     fn flush(&mut self);
 }
 
-/// Hub75 wraps a LedMatrix
+/// Hub75 wraps LedMatrix
 pub struct Hub75 {
     matrix: LedMatrix,
     offscreen: LedCanvas,
-}
-
-impl Hub75 {
-    pub fn new() -> Self {
-        let mut options = LedMatrixOptions::new();
-        options.set_hardware_mapping("adafruit-hat-pwm");
-        options.set_chain_length(4);
-        options.set_hardware_pulsing(false);
-        options.set_rows(16);
-        options.set_cols(32);
-        options.set_multiplexing(3);
-        options.set_row_address_type(2);
-        options.set_brightness(40);
-        //options.set_pwm_lsb_nanoseconds(130);
-        //options.set_inverse_colors(true);
-        //options.set_refresh_rate(true);
-        let matrix = LedMatrix::new(Some(options)).unwrap();
-        let mut offscreen = matrix.offscreen_canvas();
-        offscreen.clear();
-        Hub75 { matrix, offscreen }
-    }
 }
 
 unsafe impl Send for Hub75 {}
@@ -77,6 +57,27 @@ impl Drawing<Rgb888> for Hub75 {
                 &LedColor::from_raw_data(color.into()),
             );
         }
+    }
+}
+
+impl Hub75 {
+    pub fn new() -> Self {
+        let mut options = LedMatrixOptions::new();
+        options.set_hardware_mapping("adafruit-hat-pwm");
+        options.set_chain_length(4);
+        options.set_hardware_pulsing(false);
+        options.set_rows(16);
+        options.set_cols(32);
+        options.set_multiplexing(3);
+        options.set_row_address_type(2);
+        options.set_brightness(40);
+        //options.set_pwm_lsb_nanoseconds(130);
+        //options.set_inverse_colors(true);
+        //options.set_refresh_rate(true);
+        let matrix = LedMatrix::new(Some(options)).unwrap();
+        let mut offscreen = matrix.offscreen_canvas();
+        offscreen.clear();
+        Hub75 { matrix, offscreen }
     }
 }
 
@@ -157,7 +158,7 @@ where
     }
 }
 
-/// Marquee contains and manipulates a Scrollable
+/// Marquee contains a Scrollable
 pub struct Marquee<T, U>
 where
     T: Drawing<U> + Flushable,
@@ -176,19 +177,18 @@ where
     }
 
     /// scroll through the list of images n times
-    pub fn scroll_n_times<'a, I, V>(&mut self, images: I, n: u32)
+    pub fn scroll_n_times<V>(&mut self, images: Vec<V>, n: u32)
     where
-        I: IntoIterator<Item = &'a V> + Clone,
-        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions + 'a,
+        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions,
     {
         self.display.set_wrap(false);
-        for _i in 0..n {
-            for image in images.clone() {
+        for i in 0..n {
+            for image in images.iter() {
                 self.display.set_x(SCREEN_WIDTH);
                 let width = image.size()[0];
                 self.display.set_width(width);
                 let mut prev = time::Instant::now();
-                for _j in 0..(width + SCREEN_WIDTH) {
+                for j in 0..(width + SCREEN_WIDTH) {
                     let now = time::Instant::now();
                     self.display.inc_x(-1);
                     self.display.draw(image.clone());
@@ -234,7 +234,7 @@ where
     /// display the given image for duration time
     pub fn display_for_duration<V>(&mut self, image: V, duration: time::Duration)
     where
-        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions + Clone,
+        V: IntoIterator<Item = Pixel<U>> + Dimensions + Clone,
     {
         self.display.set_x(0);
         self.display.draw(image.clone());

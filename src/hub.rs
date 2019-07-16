@@ -177,18 +177,19 @@ where
     }
 
     /// scroll through the list of images n times
-    pub fn scroll_n_times<V>(&mut self, images: Vec<V>, n: u32)
+    pub fn scroll_n_times<'a, I, V>(&mut self, images: I, n: u32)
     where
-        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions,
+        I: IntoIterator<Item = &'a V> + Clone,
+        V: IntoIterator<Item = Pixel<U>> + Clone + Dimensions + 'a,
     {
         self.display.set_wrap(false);
-        for i in 0..n {
-            for image in images.iter() {
+        for _i in 0..n {
+            for image in images.clone() {
                 self.display.set_x(SCREEN_WIDTH);
                 let width = image.size()[0];
                 self.display.set_width(width);
                 let mut prev = time::Instant::now();
-                for j in 0..(width + SCREEN_WIDTH) {
+                for _j in 0..(width + SCREEN_WIDTH) {
                     let now = time::Instant::now();
                     self.display.inc_x(-1);
                     self.display.draw(image.clone());
@@ -197,7 +198,10 @@ where
                     match time::Duration::new(0, SCROLL_WAIT_NS)
                         .checked_sub(now.duration_since(prev))
                     {
-                        Some(d) => thread::sleep(d),
+                        Some(d) => {
+                            thread::sleep(d);
+                            println!("sleeping {:?}", d)
+                        }
                         None => (),
                     }
                     prev = now;

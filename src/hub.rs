@@ -198,10 +198,7 @@ where
                     match time::Duration::new(0, SCROLL_WAIT_NS)
                         .checked_sub(now.duration_since(prev))
                     {
-                        Some(d) => {
-                            thread::sleep(d);
-                            println!("sleeping {:?}", d)
-                        }
+                        Some(d) => thread::sleep(d),
                         None => (),
                     }
                     prev = now;

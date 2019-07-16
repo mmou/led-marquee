@@ -1,0 +1,12 @@
+[package]
+name = "marquee"
+version = "0.1.0"
+authors = ["Merry Mou <mmou@mit.edu>"]
+edition = "2018"
+
+[dependencies]
+embedded-graphics= {git="https://github.com/mmou/embedded-graphics.git", branch="fix_bmp_stride", features=["bmp"]}
+piston2d-graphics="0.32.0"
+rpi-led-matrix={git="https://github.com/mmou/rust-rpi-rgb-led-matrix.git"}
+rosc = "~0.1"
+rand  = "0.7.0"

@@ -1,12 +1,18 @@
 # hub75 marquee
 
-## System description
+![](media/marquee-1.jpg)
+working on the marquee onsite
 
 
+![](media/marquee-2.jpg)
+(the rest of the stage)
 
 
+![](media/marquee-3.jpg)
+the back, at home
 
-## How to build on linux for raspberry pi
+
+### How to build on linux for raspberry pi
 1. Install the cross-compiler:
 ```
 apt install gcc-arm-linux-gnueabihf
@@ -31,7 +37,7 @@ cargo build --target armv7-unknown-linux-gnueabihf
 1. The binary can be found at
    `target/armv7-unknown-linux-gnueabihf/debug/marquee` 
 
-## Commands that work
+### Commands that work
 ```
 sudo ./demo -t 10 -D 1 runtext16.ppm --led-no-hardware-pulse --led-gpio-mapping=adafruit-hat --led-rows=16 --led-cols=32 --led-chain=2 --led-multiplexing=3 --led-row-addr-type=2 --led-brightness=50
 ```
